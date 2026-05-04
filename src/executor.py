@@ -7,16 +7,24 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import WebDriverException
 import os
 
 class SeleniumExecutor:
     def __init__(self, headless=False):
         options = webdriver.ChromeOptions()
         if headless:
-            options.add_argument("--headless")
-        # In a real environment, we'd handle driver installation.
-        # For this implementation, we assume chromedriver is in PATH.
-        self.driver = webdriver.Chrome(options=options)
+            # Use the modern headless mode where available
+            options.add_argument("--headless=new")
+        try:
+            # With Selenium >= 4.6, Selenium Manager will auto-resolve the driver
+            self.driver = webdriver.Chrome(options=options)
+        except WebDriverException as e:
+            raise RuntimeError(
+                "Failed to start Chrome. Ensure Google Chrome/Chromium (or Chrome for Testing) is installed. "
+                "Selenium Manager (bundled with Selenium) will handle the driver automatically. "
+                f"Original error: {e}"
+            )
         self.wait = WebDriverWait(self.driver, 10)
 
     def navigate(self, url):

@@ -21,7 +21,7 @@ TestFlowAI is a robust framework that uses Selenium to run automation tests on w
    ```
    OPENAI_API_KEY=your_api_key_here
    ```
-4. Ensure you have `chromedriver` installed and in your PATH.
+4. Ensure you have Google Chrome/Chromium installed. With Selenium ≥ 4.6, Selenium Manager will automatically download and manage the correct ChromeDriver — no manual setup required.
 
 ## Usage
 

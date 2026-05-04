@@ -2,7 +2,7 @@
 # This project requires Python >= 3.10. The following environment markers
 # both document and enforce the interpreter version when installing via pip.
 
-selenium; python_version >= '3.10'
+selenium>=4.6; python_version >= '3.10'
 openai; python_version >= '3.10'
 rich; python_version >= '3.10'
 python-dotenv; python_version >= '3.10'
