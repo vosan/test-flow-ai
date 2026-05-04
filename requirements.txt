@@ -1,0 +1,14 @@
+## Python interpreter requirement
+# This project requires Python >= 3.10. The following environment markers
+# both document and enforce the interpreter version when installing via pip.
+
+selenium; python_version >= '3.10'
+openai; python_version >= '3.10'
+rich; python_version >= '3.10'
+python-dotenv; python_version >= '3.10'
+
+# Fail fast on unsupported Python versions (< 3.10)
+# This uses a non-existent package name under the inverse marker to trigger
+# an installation error on older interpreters, effectively enforcing the
+# Python version constraint through requirements.txt alone.
+unsupported-python-version; python_version < '3.10'

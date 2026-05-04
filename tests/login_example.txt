@@ -1,0 +1,5 @@
+navigate to https://the-internet.herokuapp.com/login
+type to username: tomsmith
+type to password: SuperSecretPassword!
+click login
+verify You logged into a secure area!
