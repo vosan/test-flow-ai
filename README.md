@@ -81,6 +81,14 @@ python -m src.main tests/sample_test.txt
 - `help`: Show usage instructions.
 - `exit` or `quit`: Close the tool.
 
+### Browser visibility (headless vs visible)
+- By default, TestFlowAI launches a visible Chrome window so you can observe execution.
+- To run in headless mode (useful for CI/servers without a display), set the environment variable `HEADLESS=true`.
+  - Examples:
+    - macOS/Linux: `HEADLESS=true python -m src.main`
+    - Windows (PowerShell): `$env:HEADLESS='true'; python -m src.main`
+  - You can also put `HEADLESS=true` in your `.env` file.
+
 ## Project Structure
 
 - `src/executor.py`: Selenium wrapper for browser actions.

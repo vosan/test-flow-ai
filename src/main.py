@@ -4,8 +4,12 @@ from src.orchestrator import TestOrchestrator
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
+from dotenv import load_dotenv
 
 console = Console()
+
+# Ensure environment variables from .env are available early (for HEADLESS)
+load_dotenv()
 
 def show_help():
     help_text = """
@@ -60,9 +64,10 @@ def main():
     
     orchestrator = None
     try:
-        # We use headless=True by default in this environment as we might not have a display
-        # In a real local setup, users might want to see the browser.
-        orchestrator = TestOrchestrator(headless=True)
+        # Default to a visible browser. Allow overriding via HEADLESS env var for CI/servers.
+        headless_env = os.getenv("HEADLESS", "false").strip().lower()
+        headless = headless_env in {"1", "true", "yes", "on"}
+        orchestrator = TestOrchestrator(headless=headless)
         
         if len(sys.argv) > 1:
             batch_mode(orchestrator, sys.argv[1])
