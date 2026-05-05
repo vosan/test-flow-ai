@@ -1,0 +1,51 @@
+# Secrets and environment files
+.env
+.env.*
+!.env.example
+!templates/.env.template
+
+# Python caches and compiled files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+.envrc
+.python-version
+
+# Packaging / distribution
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Test/coverage
+.pytest_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Logs and runtime files
+logs/
+*.log
+.cache/
+
+# IDE/editor settings
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node (in case of mixed projects)
+node_modules/

@@ -12,25 +12,30 @@ class TestOrchestrator:
         self.executor = SeleniumExecutor(headless=headless)
         self.agent = AIAgent()
         # Configurable retries
-        self.selenium_retries = self._get_int_env("SELENIUM_RETRIES", 10, min_v=1, max_v=100)
-        self.ai_retries = self._get_int_env("AI_RETRIES", 2, min_v=0, max_v=10)
+        self.selenium_retries = self._get_int_env("SELENIUM_RETRIES", 5, min_v=1, max_v=100)
+        # Note: AI_RETRIES represents the TOTAL number of AI planning attempts (not plus one)
+        self.ai_retries = self._get_int_env("AI_RETRIES", 2, min_v=1, max_v=10)
 
     def run_step(self, human_step):
         console.print(f"[bold blue]Processing step:[/bold blue] {human_step}")
         
         # Enforce quoting rule for exact text verification steps
         step_lower = human_step.strip().lower()
+        user_verify_literal = None
         if step_lower.startswith("verify") or step_lower.startswith("check"):
-            if not re.search(r"^(?:verify|check)\s+(['\"])(.*?)\1\s*$", human_step.strip(), flags=re.IGNORECASE):
+            m_verify = re.search(r"^(?:verify|check)\s+(['\"])(.*?)\1\s*$", human_step.strip(), flags=re.IGNORECASE)
+            if not m_verify:
                 console.print(
                     "[bold red]Input Error:[/bold red] Exact text must be surrounded with quotes. "
                     "Example: verify \"Google\" or verify 'Google'"
                 )
                 return False
+            # Capture the exact literal inside quotes to enforce verbatim usage later
+            user_verify_literal = m_verify.group(2)
 
-        # Outer loop: AI planning attempts
+        # Outer loop: AI planning attempts (total attempts == self.ai_retries)
         last_error = None
-        for ai_attempt in range(1, self.ai_retries + 2):  # total attempts = 1 initial + ai_retries re-plans
+        for ai_attempt in range(1, self.ai_retries + 1):
             if ai_attempt > 1:
                 console.print(
                     f"[yellow]Re-asking AI for a new plan (AI attempt {ai_attempt}/{self.ai_retries})...[/yellow]"
@@ -50,10 +55,27 @@ class TestOrchestrator:
                 last_error = command.get("error")
                 console.print(f"[bold red]AI Error:[/bold red] {last_error}")
                 # If AI failed to even produce a plan, try next AI attempt if available
-                if ai_attempt <= self.ai_retries:
+                if ai_attempt < self.ai_retries:
                     continue
                 else:
                     return False
+
+            # If this is a verify/check step, enforce that the text exactly matches the user's quoted literal
+            if user_verify_literal is not None and command.get("action") == "verify":
+                ai_text = command.get("text", "")
+                # Unquote AI text if it sent quotes back
+                if isinstance(ai_text, str) and len(ai_text) >= 2 and (
+                    (ai_text.startswith('"') and ai_text.endswith('"')) or (ai_text.startswith("'") and ai_text.endswith("'"))
+                ):
+                    ai_text_unquoted = ai_text[1:-1]
+                else:
+                    ai_text_unquoted = ai_text
+                if ai_text_unquoted != user_verify_literal:
+                    console.print(
+                        f"[yellow]Using exact quoted text from user instead of AI output: '{user_verify_literal}'[/yellow]"
+                    )
+                # Overwrite with the exact literal from the user (no surrounding quotes)
+                command["text"] = user_verify_literal
 
             # 3. Execute command with Selenium-level retries
             success = False
@@ -91,13 +113,13 @@ class TestOrchestrator:
                 f"[bold yellow]All Selenium attempts ({self.selenium_retries}) failed for the current AI plan.[/bold yellow]"
             )
             last_error = sel_error
-            if ai_attempt > self.ai_retries:
+            if ai_attempt >= self.ai_retries:
                 # No more AI retries left
                 break
 
         # Final failure
         console.print(
-            f"[bold red]Step failed after {self.ai_retries + 1} AI attempt(s) "
+            f"[bold red]Step failed after {self.ai_retries} AI attempt(s) "
             f"and up to {self.selenium_retries} Selenium attempt(s) each. Last error: {last_error}[/bold red]"
         )
         return False

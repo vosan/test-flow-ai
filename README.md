@@ -18,7 +18,13 @@ TestFlowAI is a robust framework that uses Selenium to run automation tests on w
    ```bash
    pip install -r requirements.txt
    ```
-3. Configure your preferred AI provider in a `.env` file. Quick examples:
+3. Create your local environment file from the template:
+   ```bash
+   cp templates/.env.template .env
+   ```
+   Then open `.env` and fill in your API key and any options you need. The `.env` file is git-ignored to prevent accidental secret leaks.
+
+   Configure your preferred AI provider in the `.env` file. Quick examples:
 
    - OpenAI (default):
      ```
@@ -63,6 +69,11 @@ TestFlowAI is a robust framework that uses Selenium to run automation tests on w
      ```
 4. Ensure you have Google Chrome/Chromium installed. With Selenium ≥ 4.6, Selenium Manager will automatically download and manage the correct ChromeDriver — no manual setup required.
 
+### Notes on environment files and secrets
+- The repository includes a template at `templates/.env.template`.
+- Your local `.env` (at the project root) is ignored by Git via `.gitignore` to avoid committing secrets.
+- Never commit real API keys. If you need to share sample configuration, update the template instead.
+
 ## Usage
 
 ### Interactive Mode
@@ -82,6 +93,8 @@ python -m src.main tests/sample_test.txt
 - For exact text values, surround them with quotes in your step inputs. For example:
   - `verify "Google"`
   - `verify 'You logged into a secure area!'`
+- Quoted text is treated as an exact literal and will NOT be auto-corrected by the AI (even if it has typos or extra words).
+  - Example: `verify "You logged into a secure very area!"` will search for that exact string. If the page shows a different message, the step will fail rather than being "fixed" by the AI.
 - `help`: Show usage instructions.
 - `exit` or `quit`: Close the tool.
 
@@ -99,14 +112,16 @@ python -m src.main tests/sample_test.txt
 
 ### Reliability and automatic retries
 - Each step uses a two-layer retry strategy to improve robustness:
-  - Selenium-level retries: the exact set of actions/locators proposed by the AI is attempted up to 10 times by default.
-  - AI-level retries: if all Selenium attempts fail, the same step is sent back to the AI to regenerate actions/locators, up to 2 times by default.
+  - Selenium-level retries: the exact set of actions/locators proposed by the AI is attempted up to `SELENIUM_RETRIES` times (default 10).
+  - AI-level attempts: if all Selenium attempts fail, the step can be re-planned by the AI up to `AI_RETRIES` times in total (default 2). This number is the total number of AI planning attempts, not “retries plus one”. For example:
+    - `AI_RETRIES=1` → up to 1 AI plan (no re-plan).
+    - `AI_RETRIES=2` → up to 2 distinct AI plans.
 - Configure via environment variables (can be placed in your `.env`):
   - `SELENIUM_RETRIES` (default `10`)
-  - `AI_RETRIES` (default `2`)
+  - `AI_RETRIES` (default `2`, minimum `1`)
 - Example:
   ```bash
-  SELENIUM_RETRIES=15 AI_RETRIES=3 python -m src.main tests/sample_test.txt
+  SELENIUM_RETRIES=15 AI_RETRIES=2 python -m src.main tests/sample_test.txt
   ```
 - A small exponential backoff is applied between Selenium attempts; the page state is refreshed before each AI attempt.
 

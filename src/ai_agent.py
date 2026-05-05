@@ -91,6 +91,16 @@ class AIAgent:
         Important input convention:
         - Exact text values in the user's step are always surrounded by quotes (either single ' or double ").
           Example: verify "Login successful" or verify 'Welcome back'.
+        - CRITICAL: Any substring provided inside quotes in the human step is an exact literal and MUST be copied verbatim
+          to the output JSON without ANY changes. Do NOT fix grammar, spelling, punctuation, whitespace, or wording.
+          Do NOT add or remove words.
+          For verify/check actions, set the JSON field "text" to exactly the content inside the user's quotes.
+          Examples (correct behavior):
+            Human: verify "You logged into a secure very area!" -> {"action":"verify", "text":"You logged into a secure very area!"}
+            Human: verify 'Login  OK' -> {"action":"verify", "text":"Login  OK"}
+          Incorrect (DO NOT do this):
+            {"action":"verify", "text":"You logged into a secure area!"}   # removed the word 'very' (WRONG)
+            {"action":"verify", "text":"Login OK"}                          # collapsed spaces or changed punctuation (WRONG)
         
         Supported actions:
         - {"action": "navigate", "url": "..."}

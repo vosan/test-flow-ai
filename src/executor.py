@@ -58,8 +58,10 @@ class SeleniumExecutor:
         options.add_argument("--no-default-browser-check")
         options.add_argument("--disable-notifications")
         options.add_argument("--disable-extensions")
+        options.add_argument("--disable-infobars")
         # Reduce password manager surfaces further
         options.add_argument("--disable-features=PasswordManagerOnboarding,PasswordManagerOnboardingFlow")
+        options.add_argument("--disable-save-password-bubble")
 
         if strict_no_pw_ui:
             # Force a basic password store and disable more password/autofill features at the feature flag level
