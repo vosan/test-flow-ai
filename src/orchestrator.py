@@ -1,6 +1,7 @@
 from src.executor import SeleniumExecutor
 from src.ai_agent import AIAgent
 from src.schema import Command as DSLCommand, normalize_legacy
+from src.selector_resolver import SelectorResolver
 from rich.console import Console
 import re
 import os
@@ -12,6 +13,7 @@ class TestOrchestrator:
     def __init__(self, headless=False):
         self.executor = SeleniumExecutor(headless=headless)
         self.agent = AIAgent()
+        self.resolver = SelectorResolver()
         # Configurable retries
         self.selenium_retries = self._get_int_env("SELENIUM_RETRIES", 5, min_v=1, max_v=100)
         # Note: AI_RETRIES represents the TOTAL number of AI planning attempts (not plus one)
@@ -146,9 +148,27 @@ class TestOrchestrator:
         if action == "navigate":
             return self.executor.navigate(command["url"])
         elif action == "click":
-            return self.executor.click(command["target"])
+            # Resolve human-friendly target to a CSS selector before execution
+            page_source = self.executor.get_page_source()
+            current_url = self.executor.get_current_url()
+            res = self.resolver.resolve(command["target"], page_source, current_url)
+            selector = res.get("selector")
+            confidence = float(res.get("confidence") or 0.0)
+            console.print(f"[dim]Resolved target -> selector:[/dim] '{command['target']}' -> '{selector}' (conf {confidence:.2f})")
+            # Guard against unresolved/meaningless selectors
+            if not selector or selector in {"page", "active_element"} or confidence < 0.3:
+                raise ValueError(f"Could not resolve a usable selector for target '{command['target']}' (confidence {confidence:.2f})")
+            return self.executor.click(selector)
         elif action == "type":
-            return self.executor.type_text(command["target"], command["value"])
+            page_source = self.executor.get_page_source()
+            current_url = self.executor.get_current_url()
+            res = self.resolver.resolve(command["target"], page_source, current_url)
+            selector = res.get("selector")
+            confidence = float(res.get("confidence") or 0.0)
+            console.print(f"[dim]Resolved target -> selector:[/dim] '{command['target']}' -> '{selector}' (conf {confidence:.2f})")
+            if not selector or selector in {"page", "active_element"} or confidence < 0.3:
+                raise ValueError(f"Could not resolve a usable selector for target '{command['target']}' (confidence {confidence:.2f})")
+            return self.executor.type_text(selector, command["value"])
         elif action == "press_key":
             return self.executor.press_key(command["key"])
         elif action == "verify":
