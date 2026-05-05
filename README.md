@@ -11,6 +11,84 @@ TestFlowAI is a robust framework that uses Selenium to run automation tests on w
 - **Self-Healing (Conceptual)**: AI analyzes page source to find the best selectors dynamically.
  - **Privacy-friendly browser session**: Always launches Chrome with a clean temporary profile, password manager disabled, and notifications blocked to avoid pop-ups and data persistence between runs.
 
+## Technical Details
+
+This section summarizes how TestFlowAI is implemented under the hood: core components, data flow, retries, and configuration.
+
+- High-level architecture
+  - src/main.py: CLI entry point. Loads environment variables (.env supported), determines headless mode via HEADLESS, and creates TestOrchestrator.
+  - src/orchestrator.py: Coordinates the AI planning loop and Selenium execution loop. Applies input rules (quoted literal enforcement for verify/check), handles retries, and renders rich console output.
+  - src/ai_agent.py: Provider-agnostic LLM client. Translates a human-readable step plus current page context into a structured JSON command.
+  - src/executor.py: Thin Selenium wrapper that performs atomic browser actions with small UX hardening (temporary profile, disabled password manager/notifications, optional stricter suppression).
+
+- End-to-end flow per step
+  1) Orchestrator receives the user step string and validates special cases:
+     - If the step begins with verify or check, the user must provide the exact text in quotes (single or double). The quoted literal is captured for strict matching later.
+  2) AI planning attempts (AI_RETRIES total):
+     - Before each AI attempt, Orchestrator pulls a fresh snapshot: page_source and current_url from SeleniumExecutor.
+     - It calls AIAgent.translate_step(human_step, page_source, current_url).
+     - AIAgent tries to return a JSON command: {"action": ..., ...} or {"error": ...}.
+     - If verify/check, Orchestrator overwrites any AI-provided text with the user’s exact quoted literal to guarantee verbatim matching.
+  3) Selenium execution attempts (SELENIUM_RETRIES per AI plan):
+     - Orchestrator calls Executor methods (navigate, click, type_text, press_key, verify_text). On exceptions, it retries with a short exponential backoff. If all Selenium attempts fail, Orchestrator either asks the AI for a new plan (if any AI attempts remain) or reports failure.
+
+- AIAgent implementation details (src/ai_agent.py)
+  - Provider-agnostic configuration via environment variables:
+    - Model: LLM_MODEL (or AI_MODEL). Default: gpt-4o.
+    - API key: LLM_API_KEY (or OPENAI_API_KEY).
+    - Base URL: LLM_BASE_URL (or OPENAI_BASE_URL) for OpenAI-compatible endpoints (OpenRouter/Groq/Together/Fireworks/local Ollama, etc.).
+    - Azure OpenAI: AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, AZURE_OPENAI_API_VERSION. If endpoint is set, the Azure client is preferred and the model name should be your Azure deployment name.
+  - Response handling:
+    - First tries JSON mode via response_format={"type":"json_object"} (where supported).
+    - Falls back to parsing raw text into JSON; includes a small helper to extract the first JSON object from text.
+  - Prompting conventions:
+    - The system prompt explicitly instructs the model to copy any user-quoted text verbatim for verify/check actions. The Orchestrator enforces this again as a safety belt.
+  - No-credentials mode:
+    - If no usable client can be created, AIAgent falls back to a lightweight _mock_translate that supports a small subset of commands for demo/testing purposes.
+  - Token discipline:
+    - To keep prompts smaller, only the first ~5000 characters of page_source are included in the prompt.
+
+- Orchestrator logic (src/orchestrator.py)
+  - Input rule: verify/check must include exact text in quotes; otherwise the step is rejected early with a helpful message.
+  - Two-layer retry design:
+    - AI-level: Up to AI_RETRIES total distinct AI plans.
+    - Selenium-level: Up to SELENIUM_RETRIES attempts per AI plan, with short exponential backoff and informative console messages when recovering.
+  - Output: Always prints an "AI Thought" line (the JSON command or error), then prints Success/Failure with context. Final failures summarize the last error.
+  - Type conversion safeguards: environment integers are clamped to sensible ranges to avoid pathological retry counts.
+
+- SeleniumExecutor implementation (src/executor.py)
+  - Browser session:
+    - Chrome is started with a fresh temporary user data directory on each run to avoid persistence between tests.
+    - Password manager and site notifications are disabled via Chrome prefs. Optional STRICT_NO_PASSWORD_UI enables additional hardening flags and incognito mode to suppress password/autofill prompts.
+    - Headless mode is controlled by HEADLESS; when enabled, the modern "--headless=new" is used where supported.
+  - Actions:
+    - navigate(url): auto-prefixes https:// when no scheme is given.
+    - click(selector): waits for element_to_be_clickable and attempts to dismiss transient overlays (ESC) before clicking.
+    - type_text(selector, text): waits for presence, clears, then sends keys.
+    - press_key(key_name): maps to selenium.webdriver.common.keys.Keys. Raises ValueError on unknown keys (so the orchestrator correctly marks the step as failed and may retry).
+    - verify_text(text): performs a strict substring check against the current page_source and raises on mismatch.
+  - Cleanup: quit() always tries to close the browser and delete the temporary profile directory.
+
+- Command JSON contract (produced by the AI agent)
+  - {"action": "navigate", "url": "..."}
+  - {"action": "click", "selector": "..."}
+  - {"action": "type", "selector": "...", "value": "..."}
+  - {"action": "press_key", "key": "..."}
+  - {"action": "verify", "text": "..."}
+  - {"error": "..."} when the AI cannot determine a valid action/selector
+
+- Configuration summary (env vars)
+  - HEADLESS=true|false – run Chrome headless (useful for CI).
+  - STRICT_NO_PASSWORD_UI=true|false – aggressively suppress password/autofill UI and prompts.
+  - SELENIUM_RETRIES – per-plan Selenium attempts (default 10; the code clamps environment input to a safe range).
+  - AI_RETRIES – total AI planning attempts per step (default 2; minimum 1).
+  - LLM_MODEL / AI_MODEL – model or deployment name; see examples in Installation.
+  - LLM_API_KEY / OPENAI_API_KEY – API key depending on provider.
+  - LLM_BASE_URL / OPENAI_BASE_URL – override endpoint for OpenAI-compatible providers.
+  - AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, AZURE_OPENAI_API_VERSION – Azure-specific settings.
+
+These details are complementary to the Usage and Reliability sections below; together, they describe how inputs are translated into robust browser actions and how failures propagate to provide clear, debuggable outcomes.
+
 ## Installation
 
 1. Clone the repository.
