@@ -9,6 +9,7 @@ TestFlowAI is a robust framework that uses Selenium to run automation tests on w
 - **Interactive Mode**: Enter steps one-by-one in the terminal.
 - **Batch Mode**: Run a group of steps from a `.txt` file.
 - **Self-Healing (Conceptual)**: AI analyzes page source to find the best selectors dynamically.
+ - **Privacy-friendly browser session**: Always launches Chrome with a clean temporary profile, password manager disabled, and notifications blocked to avoid pop-ups and data persistence between runs.
 
 ## Installation
 
@@ -91,6 +92,10 @@ python -m src.main tests/sample_test.txt
     - macOS/Linux: `HEADLESS=true python -m src.main`
     - Windows (PowerShell): `$env:HEADLESS='true'; python -m src.main`
   - You can also put `HEADLESS=true` in your `.env` file.
+
+### Browser profile and prompts
+- TestFlowAI starts Chrome with a fresh temporary user data directory on every run. No cookies, cache, or saved passwords are reused.
+- The Chrome password manager is disabled and site notifications are blocked to prevent pop-ups and prompts from disrupting automation.
 
 ## Project Structure
 
