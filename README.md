@@ -24,7 +24,7 @@ TestFlowAI is a robust framework that uses Selenium to run automation tests on w
      ```
      OPENAI_API_KEY=your_openai_key
      # optional overrides
-     LLM_MODEL=gpt-4o
+     LLM_MODEL=gpt-5.4-mini
      ```
 
    - OpenAI‑compatible providers (just set a base URL and a key):
