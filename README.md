@@ -97,6 +97,19 @@ python -m src.main tests/sample_test.txt
 - TestFlowAI starts Chrome with a fresh temporary user data directory on every run. No cookies, cache, or saved passwords are reused.
 - The Chrome password manager is disabled and site notifications are blocked to prevent pop-ups and prompts from disrupting automation.
 
+### Reliability and automatic retries
+- Each step uses a two-layer retry strategy to improve robustness:
+  - Selenium-level retries: the exact set of actions/locators proposed by the AI is attempted up to 10 times by default.
+  - AI-level retries: if all Selenium attempts fail, the same step is sent back to the AI to regenerate actions/locators, up to 2 times by default.
+- Configure via environment variables (can be placed in your `.env`):
+  - `SELENIUM_RETRIES` (default `10`)
+  - `AI_RETRIES` (default `2`)
+- Example:
+  ```bash
+  SELENIUM_RETRIES=15 AI_RETRIES=3 python -m src.main tests/sample_test.txt
+  ```
+- A small exponential backoff is applied between Selenium attempts; the page state is refreshed before each AI attempt.
+
 ## Project Structure
 
 - `src/executor.py`: Selenium wrapper for browser actions.
