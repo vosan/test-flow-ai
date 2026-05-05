@@ -85,31 +85,45 @@ class AIAgent:
 
     def translate_step(self, human_step, page_source, current_url):
         system_prompt = """
-        You are a test automation expert. Given a natural language test step, you must return a JSON object representing the Selenium action to take.
-        Use the provided page source to find the best CSS selectors.
-        
+        You are a test automation expert. Given a natural language test step, return a JSON object using the STRICT DSL below.
+        Do NOT include any fields that are not in the DSL. Do NOT use the legacy 'selector' or 'text' fields.
+
+        DSL schema (fields and meanings):
+        {
+          "action": "navigate" | "click" | "type" | "press_key" | "verify",
+          "target": string (required for all non-navigate actions; when unsure, use a reasonable CSS selector or a placeholder like "page"),
+          "value": optional string (only for type),
+          "url": optional string (only for navigate),
+          "key": optional string (only for press_key; e.g., ENTER, ESCAPE, TAB),
+          "assertion": optional object (only for verify)
+        }
+
+        For verify, use:
+        {
+          "assertion": {
+            "type": "contains_text" | "equals_text" | "element_visible" | "element_count",
+            "expected": string | number,
+            "scope": optional string
+          }
+        }
+
         Important input convention:
         - Exact text values in the user's step are always surrounded by quotes (either single ' or double ").
           Example: verify "Login successful" or verify 'Welcome back'.
         - CRITICAL: Any substring provided inside quotes in the human step is an exact literal and MUST be copied verbatim
           to the output JSON without ANY changes. Do NOT fix grammar, spelling, punctuation, whitespace, or wording.
           Do NOT add or remove words.
-          For verify/check actions, set the JSON field "text" to exactly the content inside the user's quotes.
-          Examples (correct behavior):
-            Human: verify "You logged into a secure very area!" -> {"action":"verify", "text":"You logged into a secure very area!"}
-            Human: verify 'Login  OK' -> {"action":"verify", "text":"Login  OK"}
-          Incorrect (DO NOT do this):
-            {"action":"verify", "text":"You logged into a secure area!"}   # removed the word 'very' (WRONG)
-            {"action":"verify", "text":"Login OK"}                          # collapsed spaces or changed punctuation (WRONG)
-        
-        Supported actions:
-        - {"action": "navigate", "url": "..."}
-        - {"action": "click", "selector": "..."}
-        - {"action": "type", "selector": "...", "value": "..."}
-        - {"action": "press_key", "key": "..."}
-        - {"action": "verify", "text": """ + "..." + """}
+          For verify/check actions, set assertion.type to "contains_text" (unless the user explicitly demands a stricter check)
+          and set assertion.expected to exactly the content inside the user's quotes. Prefer target: "page" for page-wide checks.
 
-        If you cannot determine the action or selector, return:
+        Supported examples:
+        - Navigate: {"action": "navigate", "url": "https://example.com"}
+        - Click:    {"action": "click", "target": "button, a, input[type='submit']"}
+        - Type:     {"action": "type", "target": "input[name='q']", "value": "Selenium"}
+        - PressKey: {"action": "press_key", "target": "active_element", "key": "ENTER"}
+        - Verify:   {"action": "verify", "target": "page", "assertion": {"type": "contains_text", "expected": "Welcome"}}
+
+        If you cannot determine a sensible plan, return:
         {"error": "Reason why it failed"}
 
         Return ONLY the JSON object.
@@ -185,24 +199,46 @@ class AIAgent:
         return None
 
     def _mock_translate(self, human_step):
-        # Very basic mock for testing without API client
-        step = human_step.lower()
-        if "navigate to" in step or "go to" in step:
-            url = step.split("to ")[-1].strip()
+        # Very basic mock for testing without API client, now returning the new DSL
+        step = human_step.lower().strip()
+
+        # Navigate
+        if step.startswith("navigate to ") or step.startswith("go to "):
+            url = human_step.split(" to ", 1)[-1].strip()
             return {"action": "navigate", "url": url}
-        elif "click" in step:
-            # Try to find a button or link
-            return {"action": "click", "selector": "button, a, input[type='submit']"}
-        elif "type" in step or "enter" in step:
-            value = step.split(":")[-1].strip() if ":" in step else step.split(" ")[-1].strip()
-            selector = (
+
+        # Press key (simple heuristics)
+        if "press_key" in step or step.startswith("press "):
+            key = None
+            upper = human_step.upper()
+            for k in ["ENTER", "ESCAPE", "TAB", "SPACE", "ARROW_DOWN", "ARROW_UP"]:
+                if k in upper:
+                    key = k
+                    break
+            key = key or "ENTER"
+            return {"action": "press_key", "target": "active_element", "key": key}
+
+        # Click
+        if "click" in step:
+            return {"action": "click", "target": "button, a, input[type='submit']"}
+
+        # Type
+        if "type" in step or step.startswith("enter "):
+            # crude extraction: take after ':' or the last word
+            if ":" in human_step:
+                value = human_step.split(":", 1)[-1].strip()
+            else:
+                parts = human_step.split()
+                value = parts[-1] if parts else ""
+            target = (
                 "input[name='username']" if "username" in step else
                 "input[name='password']" if "password" in step else
                 "input"
             )
-            return {"action": "type", "selector": selector, "value": value}
-        elif "verify" in step or "check" in step:
-            # Expect quoted exact text, either single or double quotes
+            return {"action": "type", "target": target, "value": value}
+
+        # Verify / Check quoted text
+        if "verify" in step or "check" in step:
             m = re.search(r"(?:verify|check)\s+(['\"])(.*?)\1\s*$", human_step, flags=re.IGNORECASE)
             if not m:
                 return {
@@ -211,7 +247,11 @@ class AIAgent:
                     )
                 }
             quoted_text = m.group(2)
-            return {"action": "verify", "text": quoted_text}
+            return {
+                "action": "verify",
+                "target": "page",
+                "assertion": {"type": "contains_text", "expected": quoted_text},
+            }
 
         return {
             "error": (

@@ -1,5 +1,6 @@
 from src.executor import SeleniumExecutor
 from src.ai_agent import AIAgent
+from src.schema import Command as DSLCommand, normalize_legacy
 from rich.console import Console
 import re
 import os
@@ -44,7 +45,7 @@ class TestOrchestrator:
             page_source = self.executor.get_page_source()
             current_url = self.executor.get_current_url()
 
-            # 2. Translate to Selenium command
+            # 2. Translate to command via AI (may be legacy or new DSL)
             command = self.agent.translate_step(human_step, page_source, current_url)
 
             # Always show AI Thought, even if it contains an error
@@ -60,22 +61,38 @@ class TestOrchestrator:
                 else:
                     return False
 
+            # Normalize legacy schema to new DSL and validate strictly
+            try:
+                command = normalize_legacy(command)
+                # Validate and keep using plain dict to minimize refactor surface
+                _validated = DSLCommand.parse_obj(command)
+            except Exception as ve:
+                last_error = f"Invalid command schema: {ve}"
+                console.print(f"[bold red]Schema Error:[/bold red] {last_error}")
+                if ai_attempt < self.ai_retries:
+                    continue
+                else:
+                    return False
+
             # If this is a verify/check step, enforce that the text exactly matches the user's quoted literal
             if user_verify_literal is not None and command.get("action") == "verify":
-                ai_text = command.get("text", "")
-                # Unquote AI text if it sent quotes back
-                if isinstance(ai_text, str) and len(ai_text) >= 2 and (
-                    (ai_text.startswith('"') and ai_text.endswith('"')) or (ai_text.startswith("'") and ai_text.endswith("'"))
+                assertion = command.get("assertion") or {}
+                ai_expected = assertion.get("expected", "")
+                # Unquote AI expected if it sent quotes back
+                if isinstance(ai_expected, str) and len(ai_expected) >= 2 and (
+                    (ai_expected.startswith('"') and ai_expected.endswith('"')) or (ai_expected.startswith("'") and ai_expected.endswith("'"))
                 ):
-                    ai_text_unquoted = ai_text[1:-1]
+                    ai_expected_unquoted = ai_expected[1:-1]
                 else:
-                    ai_text_unquoted = ai_text
-                if ai_text_unquoted != user_verify_literal:
+                    ai_expected_unquoted = ai_expected
+                if ai_expected_unquoted != user_verify_literal:
                     console.print(
                         f"[yellow]Using exact quoted text from user instead of AI output: '{user_verify_literal}'[/yellow]"
                     )
                 # Overwrite with the exact literal from the user (no surrounding quotes)
-                command["text"] = user_verify_literal
+                assertion["type"] = assertion.get("type") or "contains_text"
+                assertion["expected"] = user_verify_literal
+                command["assertion"] = assertion
 
             # 3. Execute command with Selenium-level retries
             success = False
@@ -129,19 +146,26 @@ class TestOrchestrator:
         if action == "navigate":
             return self.executor.navigate(command["url"])
         elif action == "click":
-            return self.executor.click(command["selector"])
+            return self.executor.click(command["target"])
         elif action == "type":
-            return self.executor.type_text(command["selector"], command["value"])
+            return self.executor.type_text(command["target"], command["value"])
         elif action == "press_key":
             return self.executor.press_key(command["key"])
         elif action == "verify":
-            text = command.get("text", "")
-            # In case the AI returns quoted text, strip surrounding quotes
-            if isinstance(text, str) and len(text) >= 2 and (
-                (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'"))
-            ):
-                text = text[1:-1]
-            return self.executor.verify_text(text)
+            assertion = command.get("assertion") or {}
+            atype = assertion.get("type")
+            expected = assertion.get("expected")
+            # Only document-level assertions without selector resolution for now
+            if atype == "contains_text":
+                if not isinstance(expected, str):
+                    raise ValueError("'expected' must be a string for contains_text")
+                return self.executor.verify_text(expected)
+            elif atype == "equals_text":
+                raise NotImplementedError("equals_text assertion is not implemented yet")
+            elif atype in {"element_visible", "element_count"}:
+                raise NotImplementedError(f"{atype} assertion is not implemented yet")
+            else:
+                raise ValueError(f"Unknown verify assertion type: {atype}")
         else:
             raise ValueError(f"Unknown action: {action}")
 
