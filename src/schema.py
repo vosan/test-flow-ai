@@ -29,7 +29,7 @@ still interpret `target` as a CSS selector when a selector-like value is given.
 from __future__ import annotations
 
 from typing import Optional, Union, Literal
-from pydantic import BaseModel, root_validator, validator
+from pydantic import BaseModel, model_validator
 
 
 AssertionType = Literal[
@@ -45,21 +45,22 @@ class Assertion(BaseModel):
     expected: Optional[Union[str, int, float]] = None
     scope: Optional[str] = None
 
-    @validator("expected", always=False)
-    def _validate_expected_type(cls, v, values):  # type: ignore[override]
-        t = values.get("type")
+    @model_validator(mode="after")
+    def _validate_expected_type(self):  # type: ignore[override]
+        t = self.type
+        v = self.expected
         if t in {"contains_text", "equals_text"}:
             if v is None or not isinstance(v, str):
                 raise ValueError("expected must be a string for contains_text/equals_text assertions")
         elif t == "element_count":
-            if v is None or not isinstance(v, (int,)):
+            if v is None or not isinstance(v, int):
                 raise ValueError("expected must be an integer for element_count assertions")
             if v < 0:
                 raise ValueError("expected must be >= 0 for element_count")
         else:  # element_visible
             # No specific expected required; ignore if present
             pass
-        return v
+        return self
 
 
 ActionType = Literal["navigate", "click", "type", "press_key", "verify"]
@@ -73,19 +74,19 @@ class Command(BaseModel):
     key: Optional[str] = None
     assertion: Optional[Assertion] = None
 
-    @root_validator
-    def _check_constraints(cls, values):  # type: ignore[override]
-        action: ActionType = values.get("action")
-        target = values.get("target")
-        url = values.get("url")
-        value = values.get("value")
-        key = values.get("key")
-        assertion = values.get("assertion")
+    @model_validator(mode="after")
+    def _check_constraints(self):  # type: ignore[override]
+        action: ActionType = self.action
+        target = self.target
+        url = self.url
+        value = self.value
+        key = self.key
+        assertion = self.assertion
 
         if action == "navigate":
             if not url or not isinstance(url, str):
                 raise ValueError("'url' is required for navigate action")
-            return values
+            return self
 
         # For non-navigate, target is generally required by the new DSL
         if action in {"click", "type", "verify"} and not target:
@@ -104,7 +105,7 @@ class Command(BaseModel):
             if assertion is None:
                 raise ValueError("'assertion' is required for verify action")
 
-        return values
+        return self
 
 
 def normalize_legacy(d: dict) -> dict:

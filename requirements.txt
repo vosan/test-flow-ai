@@ -6,7 +6,7 @@ selenium>=4.6; python_version >= '3.10'
 openai; python_version >= '3.10'
 rich; python_version >= '3.10'
 python-dotenv; python_version >= '3.10'
-pydantic>=1.10; python_version >= '3.10'
+pydantic>=2.0,<3; python_version >= '3.10'
 
 # Fail fast on unsupported Python versions (< 3.10)
 # This uses a non-existent package name under the inverse marker to trigger

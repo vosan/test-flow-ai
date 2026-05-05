@@ -65,7 +65,7 @@ class TestOrchestrator:
             try:
                 command = normalize_legacy(command)
                 # Validate and keep using plain dict to minimize refactor surface
-                _validated = DSLCommand.parse_obj(command)
+                _validated = DSLCommand.model_validate(command)
             except Exception as ve:
                 last_error = f"Invalid command schema: {ve}"
                 console.print(f"[bold red]Schema Error:[/bold red] {last_error}")
