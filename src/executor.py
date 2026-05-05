@@ -111,11 +111,17 @@ class SeleniumExecutor:
         return f"Typed '{text}' into {selector}"
 
     def press_key(self, key_name):
+        """Press a keyboard key by name.
+
+        Raises:
+            ValueError: If the provided key name does not correspond to selenium.webdriver.common.keys.Keys
+        """
         key = getattr(Keys, key_name.upper(), None)
-        if key:
-            self.driver.switch_to.active_element.send_keys(key)
-            return f"Pressed {key_name}"
-        return f"Key {key_name} not found"
+        if not key:
+            # Raise to ensure orchestrator's retry/failure logic is triggered
+            raise ValueError(f"Unknown key: {key_name}")
+        self.driver.switch_to.active_element.send_keys(key)
+        return f"Pressed {key_name}"
 
     def get_page_source(self):
         # We might want to return a simplified version of the DOM to save tokens
