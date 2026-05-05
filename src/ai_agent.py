@@ -83,7 +83,7 @@ class AIAgent:
             # If anything goes wrong initializing a real client, fall back to mock
             self.client = None
 
-    def translate_step(self, human_step, page_source, current_url):
+    def translate_step(self, human_step, page_source, current_url, replan_context: Optional[dict] = None):
         system_prompt = """
         You are a test automation expert. Given a natural language test step, return a JSON object using the STRICT DSL below.
         Do NOT include any fields that are not in the DSL. Do NOT use the legacy 'selector' or 'text' fields.
@@ -129,10 +129,19 @@ class AIAgent:
         Return ONLY the JSON object.
         """
 
+        feedback_str = ""
+        if replan_context:
+            try:
+                feedback_json = json.dumps(replan_context, ensure_ascii=False)
+                feedback_str = f"\nPrevious attempt feedback (structured):\n{feedback_json}\n"
+            except Exception:
+                # Best-effort; ignore if can't serialize
+                pass
+
         user_prompt = f"""
         Current URL: {current_url}
         Human-readable step: {human_step}
-        
+        {feedback_str}
         Page Source (truncated if too long):
         {page_source[:5000]}
         """

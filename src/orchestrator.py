@@ -38,6 +38,8 @@ class TestOrchestrator:
 
         # Outer loop: AI planning attempts (total attempts == self.ai_retries)
         last_error = None
+        # Carry structured re-plan context between AI attempts when selector confidence is low
+        ai_replan_context = None
         for ai_attempt in range(1, self.ai_retries + 1):
             if ai_attempt > 1:
                 console.print(
@@ -48,7 +50,7 @@ class TestOrchestrator:
             current_url = self.executor.get_current_url()
 
             # 2. Translate to command via AI (may be legacy or new DSL)
-            command = self.agent.translate_step(human_step, page_source, current_url)
+            command = self.agent.translate_step(human_step, page_source, current_url, replan_context=ai_replan_context)
 
             # Always show AI Thought, even if it contains an error
             thought_color = "yellow" if "error" in command else "green"
@@ -95,6 +97,105 @@ class TestOrchestrator:
                 assertion["type"] = assertion.get("type") or "contains_text"
                 assertion["expected"] = user_verify_literal
                 command["assertion"] = assertion
+
+            # 2.5 Resolve selector with confidence-based decision layer (for click/type only)
+            if command.get("action") in {"click", "type"}:
+                target = command.get("target")
+                # Get a resolver snapshot (use the same page_source/current_url captured for this AI attempt)
+                res1 = self.resolver.resolve(target, page_source, current_url, broaden=False)
+                sel1 = res1.get("selector")
+                conf1 = float(res1.get("confidence") or 0.0)
+                console.print(
+                    f"[dim]Resolved target -> selector:[/dim] '{target}' -> '{sel1}' (conf {conf1:.2f}; first pass)"
+                )
+                decision_path = []
+                decision_path.append(f"first:{conf1:.2f}")
+
+                # Validate basic selector usability
+                unusable = (not sel1) or (sel1 in {"page", "active_element"})
+                if unusable:
+                    conf1 = 0.0
+
+                # Threshold decision
+                if conf1 >= 0.85 and not unusable:
+                    console.print(
+                        f"[dim]Resolved target -> selector:[/dim] '{target}' -> '{sel1}' (conf {conf1:.2f}; decision accept)"
+                    )
+                    console.print(
+                        f"[dim]Decision path:[/dim] {', '.join(decision_path)} for target '{target}'"
+                    )
+                    # Clear any previous re-plan context on success
+                    ai_replan_context = None
+                    command["resolved_selector"] = sel1
+                elif conf1 >= 0.60 and conf1 < 0.85 and not unusable:
+                    # Retry resolution once with broadened matching
+                    res2 = self.resolver.resolve(target, page_source, current_url, broaden=True)
+                    sel2 = res2.get("selector")
+                    conf2 = float(res2.get("confidence") or 0.0)
+                    console.print(
+                        f"[dim]Resolved target -> selector:[/dim] '{target}' -> '{sel2}' (conf {conf2:.2f}; broaden)"
+                    )
+                    if (not sel2) or (sel2 in {"page", "active_element"}):
+                        conf2 = 0.0
+                    decision_path.append(f"broaden:{conf2:.2f}")
+                    if conf2 >= 0.85:
+                        console.print(
+                            f"[dim]Resolved target -> selector:[/dim] '{target}' -> '{sel2}' (conf {conf2:.2f}; decision accept after broaden)"
+                        )
+                        console.print(
+                            f"[dim]Decision path:[/dim] first:{conf1:.2f}  broaden:{conf2:.2f} (accepted) for target '{target}'"
+                        )
+                        ai_replan_context = None
+                        command["resolved_selector"] = sel2
+                    else:
+                        # Trigger AI re-plan
+                        console.print(
+                            f"[yellow]Resolution below confidence threshold after broaden; requesting AI re-plan.[/yellow]"
+                        )
+                        console.print(
+                            f"[dim]Decision path:[/dim] {', '.join(decision_path)} for target '{target}'"
+                        )
+                        last_error = f"Low selector confidence for target '{target}' (path: {', '.join(decision_path)})"
+                        # Provide structured re-plan context to the AI on the next attempt
+                        ai_replan_context = {
+                            "reason": "low_confidence_selector",
+                            "target": target,
+                            "attempts": [
+                                {"pass": "first", "selector": sel1, "confidence": round(conf1, 4)},
+                                {"pass": "broaden", "selector": sel2, "confidence": round(conf2, 4)},
+                            ],
+                        }
+                        # Move to next AI attempt if available
+                        if ai_attempt < self.ai_retries:
+                            continue
+                        else:
+                            console.print(
+                                f"[bold red]Step failed due to low selector confidence and no AI retries left.[/bold red]"
+                            )
+                            return False
+                else:
+                    # conf1 < 0.60 or unusable -> immediate AI re-plan
+                    console.print(
+                        f"[yellow]Resolution confidence too low ({conf1:.2f}); requesting AI re-plan.[/yellow]"
+                    )
+                    console.print(
+                        f"[dim]Decision path:[/dim] {', '.join(decision_path)} for target '{target}'"
+                    )
+                    last_error = f"Low selector confidence for target '{target}' (path: {', '.join(decision_path)})"
+                    ai_replan_context = {
+                        "reason": "low_confidence_selector",
+                        "target": target,
+                        "attempts": [
+                            {"pass": "first", "selector": sel1, "confidence": round(conf1, 4)},
+                        ],
+                    }
+                    if ai_attempt < self.ai_retries:
+                        continue
+                    else:
+                        console.print(
+                            f"[bold red]Step failed due to low selector confidence and no AI retries left.[/bold red]"
+                        )
+                        return False
 
             # 3. Execute command with Selenium-level retries
             success = False
@@ -148,18 +249,27 @@ class TestOrchestrator:
         if action == "navigate":
             return self.executor.navigate(command["url"])
         elif action == "click":
-            # Resolve human-friendly target to a CSS selector before execution
+            # Use pre-resolved selector if available; else fall back to on-demand resolution
+            selector = command.get("resolved_selector")
+            if selector:
+                return self.executor.click(selector)
+            # Fallback path (legacy): resolve now with minimal guard
+            console.print("[dim]Using legacy on-demand resolution path (no pre-resolved selector available).[/dim]")
             page_source = self.executor.get_page_source()
             current_url = self.executor.get_current_url()
             res = self.resolver.resolve(command["target"], page_source, current_url)
             selector = res.get("selector")
             confidence = float(res.get("confidence") or 0.0)
             console.print(f"[dim]Resolved target -> selector:[/dim] '{command['target']}' -> '{selector}' (conf {confidence:.2f})")
-            # Guard against unresolved/meaningless selectors
             if not selector or selector in {"page", "active_element"} or confidence < 0.3:
                 raise ValueError(f"Could not resolve a usable selector for target '{command['target']}' (confidence {confidence:.2f})")
             return self.executor.click(selector)
         elif action == "type":
+            selector = command.get("resolved_selector")
+            if selector:
+                return self.executor.type_text(selector, command["value"])
+            # Fallback legacy resolution
+            console.print("[dim]Using legacy on-demand resolution path (no pre-resolved selector available).[/dim]")
             page_source = self.executor.get_page_source()
             current_url = self.executor.get_current_url()
             res = self.resolver.resolve(command["target"], page_source, current_url)

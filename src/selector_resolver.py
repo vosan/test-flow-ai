@@ -108,8 +108,11 @@ def _build_selector(el) -> str:
     return tag
 
 
-def _attribute_signals(el) -> List[Tuple[str, float]]:
-    """Return (text, weight) pairs for this element's identifying signals."""
+def _attribute_signals(el, broaden: bool = False) -> List[Tuple[str, float]]:
+    """Return (text, weight) pairs for this element's identifying signals.
+
+    When broaden=True, include additional attributes that may hint at intent.
+    """
     out: List[Tuple[str, float]] = []
     # Strong identifiers
     if el.get("id"):
@@ -128,6 +131,21 @@ def _attribute_signals(el) -> List[Tuple[str, float]]:
     classes = el.get("class") or []
     if classes:
         out.append((" ".join(map(str, classes)), 0.6))
+
+    if broaden:
+        # Include additional attributes that might describe the element
+        if el.get("title"):
+            out.append((str(el.get("title")), 0.8))
+        if el.get("data-testid"):
+            out.append((str(el.get("data-testid")), 0.9))
+        if el.get("alt"):
+            out.append((str(el.get("alt")), 0.75))
+        if el.get("value"):
+            out.append((str(el.get("value")), 0.8))
+        if el.get("type"):
+            out.append((str(el.get("type")), 0.5))
+        if el.get("role"):
+            out.append((str(el.get("role")), 0.5))
     return out
 
 
@@ -156,9 +174,15 @@ def _score_match(target: str, candidate: str) -> float:
 
 
 class SelectorResolver:
-    def resolve(self, target: str, page_source: str, current_url: str) -> Dict[str, object]:
+    def resolve(self, target: str, page_source: str, current_url: str, broaden: bool = False) -> Dict[str, object]:
         """
         Resolve a target string to a CSS selector using deterministic DOM analysis.
+
+        Parameters:
+            target: Human-friendly description or a CSS selector.
+            page_source: Current page HTML.
+            current_url: Current URL (reserved for future use).
+            broaden: If True, widen the candidate pool and include additional attributes.
 
         Returns: {"selector": string, "confidence": float}
         """
@@ -176,7 +200,7 @@ class SelectorResolver:
 
         best = (None, 0.0)  # (element, score)
 
-        # Consider common interactive/relevant tags first, then expand
+        # Consider common interactive/relevant tags first; broaden mode includes all elements too
         preferred_tags = [
             "input",
             "button",
@@ -188,38 +212,63 @@ class SelectorResolver:
             "span",
         ]
 
-        candidates = []
+        # Phase 1: preferred + common attribute-bearing elements
+        candidates_phase1: List = []
         for tag in preferred_tags:
-            candidates.extend(soup.find_all(tag))
+            candidates_phase1.extend(soup.find_all(tag))
+        candidates_phase1.extend(soup.select('[aria-label], [placeholder]'))
 
-        # As a last resort, include any element with aria-label or placeholder
-        candidates.extend(soup.select('[aria-label], [placeholder]'))
+        # Deduplicate while preserving order
+        seen = set()
+        uniq_candidates_phase1 = []
+        for el in candidates_phase1:
+            key = id(el)
+            if key in seen:
+                continue
+            seen.add(key)
+            uniq_candidates_phase1.append(el)
 
         target_norm = _normalize_text(target)
 
-        for el in candidates:
-            signals = _attribute_signals(el)
-            if not signals:
-                continue
+        def score_candidates(candidates_list: List) -> Tuple[Optional[object], float]:
+            local_best = (None, 0.0)
+            for el in candidates_list:
+                signals = _attribute_signals(el, broaden=broaden)
+                if not signals:
+                    continue
+                # Base score from best-matching signal with its weight
+                sig_scores = [
+                    _score_match(target_norm, text) * weight for (text, weight) in signals
+                ]
+                if not sig_scores:
+                    continue
+                score = max(sig_scores)
+                # Bonuses for interactable elements
+                if el.name in {"button", "a"}:
+                    score += 0.1 if broaden else 0.05
+                if el.name == "input" and (el.get("type") in {"submit", "button", "search"} or el.get("onclick")):
+                    score += 0.1 if broaden else 0.05
+                if el.get("role") == "button":
+                    score += 0.1 if broaden else 0.05
+                if score > local_best[1]:
+                    local_best = (el, score)
+            return local_best
 
-            # Base score from best-matching signal with its weight
-            sig_scores = [
-                _score_match(target_norm, text) * weight for (text, weight) in signals
-            ]
-            if not sig_scores:
-                continue
-            score = max(sig_scores)
+        best = score_candidates(uniq_candidates_phase1)
 
-            # Bonus if element is commonly interactable
-            if el.name in {"button", "a"}:
-                score += 0.05
-            if el.name == "input" and (el.get("type") in {"submit", "button", "search"} or el.get("onclick")):
-                score += 0.05
-            if el.get("role") == "button":
-                score += 0.05
-
-            if score > best[1]:
-                best = (el, score)
+        # Phase 2 (broaden): only if requested AND no strong candidate yet
+        if broaden and (best[0] is None or best[1] < 0.5):
+            # Include all elements as a last resort
+            candidates_phase2 = []
+            for el in soup.find_all(True):
+                key = id(el)
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidates_phase2.append(el)
+            best2 = score_candidates(candidates_phase2)
+            if best2[0] is not None and best2[1] > best[1]:
+                best = best2
 
         if best[0] is None:
             # Nothing matched at all
@@ -228,4 +277,7 @@ class SelectorResolver:
         selector = _build_selector(best[0])
         # Clamp confidence to [0,1]
         confidence = max(0.0, min(1.0, best[1]))
+        # Apply explicit damping in broaden mode to avoid overconfidence
+        if broaden:
+            confidence = max(0.0, min(1.0, confidence * 0.90))
         return {"selector": selector, "confidence": confidence}
