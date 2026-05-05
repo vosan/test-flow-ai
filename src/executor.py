@@ -11,6 +11,7 @@ from selenium.common.exceptions import WebDriverException
 import os
 import tempfile
 import shutil
+from typing import List
 
 class SeleniumExecutor:
     def __init__(self, headless=False):
@@ -137,6 +138,124 @@ class SeleniumExecutor:
             return f"Verification successful: '{text}' found on page"
         else:
             raise Exception(f"Verification failed: '{text}' not found on page")
+
+    # ===== Structured verification methods =====
+
+    def _xpath_literal(self, s: str) -> str:
+        """Return an XPath string literal that safely represents s.
+
+        Handles both single and double quotes by using concat() when needed.
+        """
+        if '"' not in s:
+            return f'"{s}"'
+        if "'" not in s:
+            return f"'{s}'"
+        parts = []
+        for part in s.split('"'):
+            if part:
+                parts.append(f'"{part}"')
+            parts.append("'\"'")  # add a literal double quote character
+        if parts and parts[-1] == "'\"'":
+            parts.pop()
+        return "concat(" + ", ".join(parts) + ")"
+
+    def verify_contains_text_page(self, expected: str):
+        self._dismiss_transient_overlays()
+        xp = f"//*[contains(normalize-space(string(.)), {self._xpath_literal(expected)})]"
+        try:
+            self.wait.until(lambda d: len(d.find_elements(By.XPATH, xp)) > 0)
+            return f"Verification successful: page contains text '{expected}'"
+        except Exception:
+            # Fallback to page_source for diagnostics only
+            page_contains = expected in (self.driver.page_source or "")
+            actual = "found in page_source" if page_contains else "not found"
+            raise AssertionError(
+                f"contains_text failed: expected='{expected}', actual={actual}"
+            )
+
+    def verify_equals_text_page(self, expected: str):
+        self._dismiss_transient_overlays()
+        xp = f"//*[normalize-space(string(.)) = {self._xpath_literal(expected.strip())}]"
+        try:
+            self.wait.until(lambda d: len(d.find_elements(By.XPATH, xp)) > 0)
+            return f"Verification successful: page has an element with exact text '{expected}'"
+        except Exception:
+            raise AssertionError(
+                f"equals_text failed: expected='{expected}', actual='no exact match on page'"
+            )
+
+    def verify_element_visible(self, selector: str):
+        try:
+            el = self.wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
+            # Optionally ensure enabled/clickable? Visibility is enough per spec.
+            return f"Verification successful: element visible '{selector}'"
+        except Exception:
+            raise AssertionError(
+                f"element_visible failed: selector='{selector}', actual='not visible'"
+            )
+
+    def verify_element_count(self, selector: str, expected_count: int):
+        try:
+            self.wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, selector)) == int(expected_count))
+            return f"Verification successful: count({selector}) == {expected_count}"
+        except Exception:
+            actual = len(self.driver.find_elements(By.CSS_SELECTOR, selector))
+            raise AssertionError(
+                f"element_count failed: selector='{selector}', expected={expected_count}, actual={actual}"
+            )
+
+    def verify_element_text_contains(self, selector: str, expected: str):
+        try:
+            def any_contains(d) -> bool:
+                els: List = d.find_elements(By.CSS_SELECTOR, selector)
+                for el in els:
+                    try:
+                        if expected in (el.text or ""):
+                            return True
+                    except Exception:
+                        continue
+                return False
+
+            self.wait.until(any_contains)
+            return f"Verification successful: element '{selector}' contains text '{expected}'"
+        except Exception:
+            # Collect a small sample of actual text for diagnostics
+            els = self.driver.find_elements(By.CSS_SELECTOR, selector)
+            sample = " | ".join([(e.text or "").strip() for e in els[:3]])
+            raise AssertionError(
+                f"contains_text failed: selector='{selector}', expected='{expected}', actual_sample='{sample}'"
+            )
+
+    def verify_element_text_equals(self, selector: str, expected: str):
+        try:
+            def any_equals(d) -> bool:
+                els: List = d.find_elements(By.CSS_SELECTOR, selector)
+                for el in els:
+                    try:
+                        if (el.text or "") == expected:
+                            return True
+                    except Exception:
+                        continue
+                return False
+
+            self.wait.until(any_equals)
+            return f"Verification successful: element '{selector}' has exact text '{expected}'"
+        except Exception:
+            els = self.driver.find_elements(By.CSS_SELECTOR, selector)
+            sample = " | ".join([(e.text or "").strip() for e in els[:3]])
+            raise AssertionError(
+                f"equals_text failed: selector='{selector}', expected='{expected}', actual_sample='{sample}'"
+            )
+
+    def verify_url_contains(self, expected_substring: str):
+        try:
+            self.wait.until(EC.url_contains(expected_substring))
+            return f"Verification successful: url contains '{expected_substring}'"
+        except Exception:
+            actual = self.driver.current_url
+            raise AssertionError(
+                f"url_contains failed: expected_substring='{expected_substring}', actual_url='{actual}'"
+            )
 
     def quit(self):
         if hasattr(self, 'driver'):

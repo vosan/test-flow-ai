@@ -101,7 +101,7 @@ class AIAgent:
         For verify, use:
         {
           "assertion": {
-            "type": "contains_text" | "equals_text" | "element_visible" | "element_count",
+            "type": "contains_text" | "equals_text" | "element_visible" | "element_count" | "url_contains",
             "expected": string | number,
             "scope": optional string
           }
@@ -122,6 +122,7 @@ class AIAgent:
         - Type:     {"action": "type", "target": "input[name='q']", "value": "Selenium"}
         - PressKey: {"action": "press_key", "target": "active_element", "key": "ENTER"}
         - Verify:   {"action": "verify", "target": "page", "assertion": {"type": "contains_text", "expected": "Welcome"}}
+        - Verify URL: {"action": "verify", "target": "page", "assertion": {"type": "url_contains", "expected": "account"}}
 
         If you cannot determine a sensible plan, return:
         {"error": "Reason why it failed"}
@@ -245,6 +246,22 @@ class AIAgent:
                 "input"
             )
             return {"action": "type", "target": target, "value": value}
+
+        # Verify URL contains
+        if ("verify url contains" in step) or ("check url contains" in step) or ("url contains" in step):
+            # Try to extract quoted text first
+            m = re.search(r"url contains\s+(['\"])(.*?)\1", human_step, flags=re.IGNORECASE)
+            if m:
+                expected = m.group(2)
+            else:
+                # take substring after 'url contains'
+                m2 = re.search(r"url contains\s+(.*)$", human_step, flags=re.IGNORECASE)
+                expected = (m2.group(1).strip() if m2 else "").strip()
+            return {
+                "action": "verify",
+                "target": "page",
+                "assertion": {"type": "url_contains", "expected": expected},
+            }
 
         # Verify / Check quoted text
         if "verify" in step or "check" in step:

@@ -37,6 +37,7 @@ AssertionType = Literal[
     "equals_text",
     "element_visible",
     "element_count",
+    "url_contains",
 ]
 
 
@@ -49,9 +50,9 @@ class Assertion(BaseModel):
     def _validate_expected_type(self):  # type: ignore[override]
         t = self.type
         v = self.expected
-        if t in {"contains_text", "equals_text"}:
+        if t in {"contains_text", "equals_text", "url_contains"}:
             if v is None or not isinstance(v, str):
-                raise ValueError("expected must be a string for contains_text/equals_text assertions")
+                raise ValueError("expected must be a string for contains_text/equals_text/url_contains assertions")
         elif t == "element_count":
             if v is None or not isinstance(v, int):
                 raise ValueError("expected must be an integer for element_count assertions")
