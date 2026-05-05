@@ -1,2 +1,2 @@
 navigate to https://www.google.com
-verify Google
+verify "Google"

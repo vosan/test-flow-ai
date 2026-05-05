@@ -88,6 +88,10 @@ class AIAgent:
         You are a test automation expert. Given a natural language test step, you must return a JSON object representing the Selenium action to take.
         Use the provided page source to find the best CSS selectors.
         
+        Important input convention:
+        - Exact text values in the user's step are always surrounded by quotes (either single ' or double ").
+          Example: verify "Login successful" or verify 'Welcome back'.
+        
         Supported actions:
         - {"action": "navigate", "url": "..."}
         - {"action": "click", "selector": "..."}
@@ -188,14 +192,16 @@ class AIAgent:
             )
             return {"action": "type", "selector": selector, "value": value}
         elif "verify" in step or "check" in step:
-            # try to capture after the keyword if provided
-            if "verify " in step:
-                text = step.split("verify ", 1)[-1].strip()
-            elif "check " in step:
-                text = step.split("check ", 1)[-1].strip()
-            else:
-                text = step
-            return {"action": "verify", "text": text}
+            # Expect quoted exact text, either single or double quotes
+            m = re.search(r"(?:verify|check)\s+(['\"])(.*?)\1\s*$", human_step, flags=re.IGNORECASE)
+            if not m:
+                return {
+                    "error": (
+                        "Exact text must be surrounded with quotes. Example: verify \"Google\" or verify 'Google'"
+                    )
+                }
+            quoted_text = m.group(2)
+            return {"action": "verify", "text": quoted_text}
 
         return {
             "error": (

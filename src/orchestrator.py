@@ -1,6 +1,7 @@
 from src.executor import SeleniumExecutor
 from src.ai_agent import AIAgent
 from rich.console import Console
+import re
 
 console = Console()
 
@@ -12,6 +13,16 @@ class TestOrchestrator:
     def run_step(self, human_step):
         console.print(f"[bold blue]Processing step:[/bold blue] {human_step}")
         
+        # Enforce quoting rule for exact text verification steps
+        step_lower = human_step.strip().lower()
+        if step_lower.startswith("verify") or step_lower.startswith("check"):
+            if not re.search(r"^(?:verify|check)\s+(['\"])(.*?)\1\s*$", human_step.strip(), flags=re.IGNORECASE):
+                console.print(
+                    "[bold red]Input Error:[/bold red] Exact text must be surrounded with quotes. "
+                    "Example: verify \"Google\" or verify 'Google'"
+                )
+                return False
+
         # 1. Get current state
         page_source = self.executor.get_page_source()
         current_url = self.executor.get_current_url()
@@ -45,7 +56,13 @@ class TestOrchestrator:
         elif action == "press_key":
             return self.executor.press_key(command["key"])
         elif action == "verify":
-            return self.executor.verify_text(command["text"])
+            text = command.get("text", "")
+            # In case the AI returns quoted text, strip surrounding quotes
+            if isinstance(text, str) and len(text) >= 2 and (
+                (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'"))
+            ):
+                text = text[1:-1]
+            return self.executor.verify_text(text)
         else:
             raise ValueError(f"Unknown action: {action}")
 

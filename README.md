@@ -78,6 +78,9 @@ python -m src.main tests/sample_test.txt
 
 ### Commands in Terminal
 - Type any natural language step (e.g., `navigate to https://www.google.com`)
+- For exact text values, surround them with quotes in your step inputs. For example:
+  - `verify "Google"`
+  - `verify 'You logged into a secure area!'`
 - `help`: Show usage instructions.
 - `exit` or `quit`: Close the tool.
 
