@@ -2,8 +2,8 @@
 
 > AI-powered test automation that **understands intent, evaluates confidence, and recovers from uncertainty**.
 
-TestFlowAI converts human-readable test steps into Selenium actions using an AI agent — but unlike typical tools, it *
-*doesn’t blindly trust AI**.  
+TestFlowAI converts human-readable test steps into Selenium actions using an AI agent — but unlike typical tools, it
+**doesn’t blindly trust AI**.  
 It scores decisions, retries intelligently, and re-plans when confidence is low.
 
 ## ✨ Key Features
@@ -61,6 +61,7 @@ Or try it locally:
 → Decision: first:0.72 → broaden:0.88 (accepted)
 ✔ Success: Clicked element: button.primary
 ```
+
 ```text
 ▶ Processing step: click Submit
 ⚠ Selenium retry 2/10 failed: Element click intercepted
@@ -119,7 +120,6 @@ These demonstrate:
 - Ambiguity handling (broaden fallback)
 - AI re-planning on failure
 
-
 ## 🏗 Technical Overview (for deeper dive)
 
 This section summarizes how TestFlowAI is implemented under the hood: core components, strict DSL, selector resolution +
@@ -130,7 +130,8 @@ confidence, retries, and configuration.
     - `src/orchestrator.py`: Core control‑loop. Translates user steps via the AI agent, validates against the DSL,
       resolves targets to selectors with confidence, decides whether to accept/broaden/AI‑replan, executes via Selenium
       with retries, manages selector cache, and prints rich logs.
-    - `src/ai_agent.py`: Provider‑agnostic LLM client (OpenAI, OpenAI‑compatible via base_url, and Azure OpenAI). Includes
+    - `src/ai_agent.py`: Provider‑agnostic LLM client (OpenAI, OpenAI‑compatible via base_url, and Azure OpenAI).
+      Includes
       a mock translator for offline use. Enforces JSON‑only output and injects structured re‑plan context.
     - `src/selector_resolver.py`: Deterministic DOM analyzer that proposes CSS selectors and confidence scores using
       id/name/class/aria‑label/placeholder/text (+ extras in broaden mode) and small interactability bonuses.
