@@ -71,22 +71,6 @@ Or try it locally:
 ✔ Success: Clicked element: input[type="submit"]
 ```
 
-## 💡 Why TestFlowAI stands out
-
-### Most AI test tools:
-
-- Generate code once and hope it works
-- Fail when selectors break
-- Provide little insight into decisions
-
-### TestFlowAI:
-
-- **Scores every decision with confidence**
-- **Adapts when uncertain (fallback → re-plan)**
-- **Explains exactly what it’s doing and why**
-
-This makes it closer to an **autonomous test execution engine** than a simple code generator.
-
 ## ⚡ Quick Start
 
 ```bash
