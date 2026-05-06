@@ -319,10 +319,3 @@ python -m src.main tests/sample_test.txt
   SELENIUM_RETRIES=15 AI_RETRIES=2 python -m src.main tests/sample_test.txt
   ```
 - A small exponential backoff is applied between Selenium attempts; the page state is refreshed before each AI attempt.
-
-## Project Structure
-
-- `src/executor.py`: Selenium wrapper for browser actions.
-- `src/ai_agent.py`: Provider-agnostic AI logic for step translation (OpenAI, OpenAI-compatible APIs, Azure, Ollama).
-- `src/orchestrator.py`: Main logic coordinating AI and Selenium.
-- `src/main.py`: CLI entry point.
