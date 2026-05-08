@@ -46,10 +46,16 @@ It scores decisions, retries intelligently, and re-plans when confidence is low.
 
 ![Demo](./assets/test_flow_ai_demo.gif)
 
-Or try it locally:
+Or try it locally with this demo test:
 
 ```bash
  python -m src.main tests/demo_test.txt
+```
+
+or enter the interactive mode to enter your own steps one by one:
+
+```bash
+ python -m src.main
 ```
 
 ## ⚡ Quick Start
@@ -62,28 +68,6 @@ cp templates/.env.template .env
 # add your API key
 python -m src.main demo_scenarios/happy_path.txt
 ```
-
-## 🧪 Demo Scenarios
-
-Run prebuilt scenarios to see different behaviors:
-
-```bash
-python -m src.main tests/happy_path.txt
-```
-
-```bash
-python -m src.main tests/ambiguity.txt
-```
-
-```bash
-python -m src.main tests/replan.txt
-```
-
-These demonstrate:
-
-- High-confidence execution
-- Ambiguity handling (broaden fallback)
-- AI re-planning on failure
 
 ## 🏗 Technical Overview (for deeper dive)
 
@@ -241,7 +225,7 @@ confidence, retries, and configuration.
 
 ### Interactive Mode
 
-Run the tool without arguments:
+Run the tool without arguments (useful for creating new tests):
 
 ```bash
 python -m src.main
@@ -266,7 +250,7 @@ python -m src.main tests/sample_test.txt
     - Example: `verify "You logged into a secure very area!"` will search for that exact string. If the page shows a
       different message, the step will fail rather than being "fixed" by the AI.
 - `help`: Show usage instructions.
-- `exit` or `quit`: Close the tool.
+- `exit` or `quit`: Close the tool (when in the interactive mode).
 
 ### Browser visibility (headless vs visible)
 
@@ -281,7 +265,7 @@ python -m src.main tests/sample_test.txt
 
 - TestFlowAI starts Chrome with a fresh temporary user data directory on every run. No cookies, cache, or saved
   passwords are reused.
-- The Chrome password manager is disabled and site notifications are blocked to prevent pop-ups and prompts from
+- The Chrome password manager is disabled, and site notifications are blocked to prevent pop-ups and prompts from
   disrupting automation.
 
 ### Reliability and automatic retries
@@ -289,15 +273,15 @@ python -m src.main tests/sample_test.txt
 - Each step uses a two-layer retry strategy to improve robustness:
     - Selenium-level retries: the exact set of actions/locators proposed by the AI is attempted up to `SELENIUM_RETRIES`
       times (default 10).
-    - AI-level attempts: if all Selenium attempts fail, the step can be re-planned by the AI up to `AI_RETRIES` times in
-      total (default 2). This number is the total number of AI planning attempts, not “retries plus one”. For example:
-        - `AI_RETRIES=1` → up to 1 AI plan (no re-plan).
-        - `AI_RETRIES=2` → up to 2 distinct AI plans.
+    - AI-level attempts: if all Selenium attempts fail, the AI can re-plan the step, up to `AI_RETRIES` times in
+      total (default 2). For example:
+        - `AI_RETRIES=1` → just one AI plan (no re-plan).
+        - `AI_RETRIES=3` → up to three distinct AI plans.
 - Configure via environment variables (can be placed in your `.env`):
-    - `SELENIUM_RETRIES` (default `10`)
-    - `AI_RETRIES` (default `2`, minimum `1`)
+    - `SELENIUM_RETRIES` (default `5`)
+    - `AI_RETRIES` (default `2`)
 - Example:
   ```bash
-  SELENIUM_RETRIES=15 AI_RETRIES=2 python -m src.main tests/sample_test.txt
+  SELENIUM_RETRIES=10 AI_RETRIES=3 python -m src.main tests/demo_test.txt
   ```
 - A small exponential backoff is applied between Selenium attempts; the page state is refreshed before each AI attempt.
