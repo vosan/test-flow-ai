@@ -23,6 +23,8 @@ class SeleniumExecutor:
         # Optional hardening to suppress ANY password-related UI/bubbles.
         # Enable by setting STRICT_NO_PASSWORD_UI=true in the environment (.env supported via main.py)
         strict_no_pw_ui = os.getenv("STRICT_NO_PASSWORD_UI", "false").strip().lower() in {"1", "true", "yes", "on"}
+        # Dedicated incognito mode flag
+        incognito = os.getenv("INCOGNITO", "false").strip().lower() in {"1", "true", "yes", "on"}
 
         # Always launch with a clean temporary user profile so nothing persists between runs
         self._temp_user_data_dir = tempfile.mkdtemp(prefix="testflowai-chrome-")
@@ -64,7 +66,7 @@ class SeleniumExecutor:
         options.add_argument("--disable-features=PasswordManagerOnboarding,PasswordManagerOnboardingFlow")
         options.add_argument("--disable-save-password-bubble")
 
-        if strict_no_pw_ui:
+        if strict_no_pw_ui or incognito:
             # Force a basic password store and disable more password/autofill features at the feature flag level
             options.add_argument("--password-store=basic")
             # Incognito sessions further suppress password save prompts and persistence

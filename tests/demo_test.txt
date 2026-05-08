@@ -1,0 +1,10 @@
+Open https://www.saucedemo.com/?utm_source
+Enter "standard_user" username
+Enter "secret_sauce" password
+Press the login button
+Add the bike light to the basket
+Open the cart
+Verify the Bike Light is in the cart
+Open the burger menu
+Logout
+

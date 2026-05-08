@@ -39,36 +39,17 @@ It scores decisions, retries intelligently, and re-plans when confidence is low.
 ### 🛡 Clean browser environment
 
 - Fresh Chrome profile every run
+- Optional Incognito/Private mode
 - No password popups or notifications
 
 ## 🚀 Live Demo
 
-![Demo](./assets/demo.gif)
+![Demo](./assets/test_flow_ai_demo.gif)
 
 Or try it locally:
 
 ```bash
- python -m src.main tests/ambiguity.txt
-```
-
-### Example logs (decision-making in action)
-
-```text
-▶ Processing step: click the login button
-✔ AI Thought: {"action": "click", "target": "login button"}
-• First pass: 'login button' → 'button#login' (conf 0.72)
-• Broaden:    'login button' → 'button.primary' (conf 0.88)
-→ Decision: first:0.72 → broaden:0.88 (accepted)
-✔ Success: Clicked element: button.primary
-```
-
-```text
-▶ Processing step: click Submit
-⚠ Selenium retry 2/10 failed: Element click intercepted
-• Cache invalidated for 'Submit'
-• Re-resolve: 'Submit' → 'input[type="submit"]' (conf 0.91)
-↻ Recovered after AI attempt 1/2 and Selenium attempt 3/10
-✔ Success: Clicked element: input[type="submit"]
+ python -m src.main tests/demo_test.txt
 ```
 
 ## ⚡ Quick Start
@@ -180,7 +161,8 @@ confidence, retries, and configuration.
 
 - Configuration summary (env vars)
     - `HEADLESS=true|false` – run Chrome headless (useful for CI).
-    - `STRICT_NO_PASSWORD_UI=true|false` – aggressively suppress password/autofill UI and prompts.
+    - `INCOGNITO=true|false` – run browser in incognito/private mode.
+    - `STRICT_NO_PASSWORD_UI=true|false` – aggressively suppress password/autofill UI and prompts (implies incognito).
     - `SELENIUM_RETRIES` – per‑plan Selenium attempts (default 5).
     - `AI_RETRIES` – total AI planning attempts per step (default 2).
     - `LLM_MODEL` / `AI_MODEL` – model or deployment name; default `gpt-4o` if unset.
