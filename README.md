@@ -52,7 +52,7 @@ Or try it locally with this demo test:
  python -m src.main tests/demo_test.txt
 ```
 
-or enter the interactive mode to enter your own steps one by one:
+or use the interactive mode to enter your own steps one by one:
 
 ```bash
  python -m src.main
